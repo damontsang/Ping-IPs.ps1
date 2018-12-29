@@ -42,9 +42,16 @@
     External,www.yahoo.com,www.yahoo.com
     External,www.google.com,www.google.com
     Internal,Dev,192.168.1.10
+.PARAMETER .ExportFile
+    Export ping results to a file name by appending '_Results' to file name assigned by parameter -FileName.
+
+    Ping-IPs.ps1 -FileName hosts.csv -ExportFile
+
+    hosts.csv: host to ping
+    hosts_Results.csv: created by the script for ping results
 
 .EXAMPLE
-    ping-IPs.ps1 -FileName hosts.csv  
+    Ping-IPs.ps1 -FileName hosts.csv  
     
     2018-Dec-29 11:46:29.886 AM: All pings started and waiting for their complete.
     2018-Dec-29 11:46:30.411 AM: @{System=External; Name=www.yahoo.com; Host=www.yahoo.com} ping success.
@@ -95,7 +102,8 @@
     2018-Dec-29 11:59:25.936 AM: [Verbose] Create host list.
     2018-Dec-29 11:59:25.968 AM: [Verbose] Initialize ping tests.
     2018-Dec-29 11:59:26.040 AM: All pings started and waiting for their complete.
-    2018-Dec-29 11:59:26.065 AM: [Verbose] All pings started and waiting for their complete. Waiting.2018-Dec-29 11:59:26.577 AM: @{System=External; Name=www.yahoo.com; Host=www.yahoo.com} ping success.
+    2018-Dec-29 11:59:26.065 AM: [Verbose] All pings started and waiting for their complete. Waiting.
+    2018-Dec-29 11:59:26.577 AM: @{System=External; Name=www.yahoo.com; Host=www.yahoo.com} ping success.
     2018-Dec-29 11:59:26.601 AM: @{System=External; Name=www.google.com; Host=www.google.com} ping success.
     .........
     2018-Dec-29 11:59:31.215 AM: [Verbose] 5.31779s All jobs completed!
@@ -119,6 +127,40 @@
     External www.yahoo.com  www.yahoo.com  5/5  0 ms            
     External www.google.com www.google.com 5/5  0 ms            
     Internal Dev            192.168.1.10   0/5  3.4 ms       
+
+.EXAMPLE
+    PS C:\Users\Damon\desktop> .\Ping-IPs.ps1 -ExportFile 
+    2018-Dec-29 15:17:10.601 PM: All pings started and waiting for their complete.
+    2018-Dec-29 15:17:11.109 PM: @{System=External; Name=www.yahoo.com; Host=www.yahoo.com} ping success.
+    2018-Dec-29 15:17:11.139 PM: @{System=External; Name=www.google.com; Host=www.google.com} ping success.
+    2018-Dec-29 15:17:11.149 PM: @{System=Internal; Name=Dev; Host=192.168.1.10} ping success.
+    2018-Dec-29 15:17:16.195 PM: All ping tests finished
+
+    System   Name           Host           Loss Average RTT (ms)
+    ------   ----           ----           ---- ----------------
+    External www.yahoo.com  www.yahoo.com  0/5  54 ms           
+    External www.google.com www.google.com 0/5  20 ms           
+    Internal Dev            192.168.1.10   0/5  0 ms            
+
+
+
+    PS C:\Users\Damon\desktop> dir *.csv
+
+
+        Directory: C:\Users\Damon\desktop
+
+
+    Mode                LastWriteTime         Length Name                                                                                                                                                                                                            
+    ----                -------------         ------ ----                                                                                                                                                                                                            
+    -a----       29/12/2018   2:12 AM            121 hosts.csv                                                                                                                                                                                                       
+    -a----       29/12/2018   3:17 PM            560 hosts_results.csv                                                                                                                                                                                               
+
+
+
+    PS C:\Users\Damon\desktop> type .\hosts_results.csv
+    2018-Dec-29 15:17:11.130 PM,@{System=External; Name=www.yahoo.com; Host=www.yahoo.com},success
+    2018-Dec-29 15:17:11.143 PM,@{System=External; Name=www.google.com; Host=www.google.com},success
+    2018-Dec-29 15:17:11.152 PM,@{System=Internal; Name=Dev; Host=192.168.1.10},success
 
 .NOTES
     Author: Damon
@@ -145,7 +187,8 @@ Param (
       }
       return $true
    })]
-   [System.IO.FileInfo]$FileName
+   [System.IO.FileInfo]$FileName="./hosts.csv",
+   [switch]$ExportFile
 )
 
 $PingStatusDescription=@{}
@@ -258,7 +301,7 @@ $Seq = 0
 $c = @()
  
 # host/ip to ping
-$c = import-csv hosts.csv
+$c = import-csv $FileName
 
 if ($Verbose){Write-Host ("{0}: [Verbose] Initialize ping tests." -f (Get-Date -Format "yyyy'-'MMM'-'dd HH':'mm':'ss'.'fff tt"))}
 $c | % {
@@ -278,14 +321,19 @@ if ($Verbose){Write-Host -NoNewline ("{0}: [Verbose] All pings started and waiti
 
 # $PreviousPingHistory = [hashtable]
 # wait until all ping jobs completed.
+$p = '(.+)(\.csv)'
+$r = '$1_results$2'
+if(test-path ($FileName -replace $p, $r)){ remove-item -Force -Confirm:$false ($FileName -replace $p, $r)}
 Do {
    if ($Verbose){Write-Host "." -NoNewline}
    Start-Sleep -Milliseconds 500
-   # get ping history from $PingHistory
-   # foreach($k in $PingHistory.Keys) {
    foreach($k in $($PingHistory.Keys)) {
       if(($PreviousPingHistory[$k] -band [uint16]1) -ne ($PingHistory[$k] -band [uint16]1)) {
          Write-Host ("{0}: {1} ping {2}." -f (Get-Date -Format "yyyy'-'MMM'-'dd HH':'mm':'ss'.'fff tt"), $k, $PingStatusDescription[$PingHistory[$k] -band [uint16]1]) # , [System.Convert]::ToString($PingHistory[$k] -band [uint16]65535,8).padleft(5,'0')) 
+         if($ExportFile){ 
+            ("{0},{1},{2}" -f (Get-Date -Format "yyyy'-'MMM'-'dd HH':'mm':'ss'.'fff tt"), $k, $PingStatusDescription[$PingHistory[$k] -band [uint16]1]) | Out-File -Append -FilePath $($FileName -replace $p, $r)
+            # Write-Host ("{0}: {1} {2}." -f (Get-Date -Format "yyyy'-'MMM'-'dd HH':'mm':'ss'.'fff tt"), $PingStatusDescription[$PingHistory[$k] -band [uint16]1], $($FileName -replace $p, $r))
+         }
          $PreviousPingHistory[$k] = $PingHistory[$k]
       }
    }
